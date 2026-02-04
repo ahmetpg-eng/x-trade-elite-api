@@ -8,8 +8,6 @@ app.use(cors());
 app.use(express.json());
 
 // ---- Geçici kullanıcı listesi (hafızada) ----
-// Gerçek projede bunu SUPABASE'e taşıyacağız.
-// Şimdilik sadece sistemin akışını görmek için:
 const users = []; // { email, password }
 
 // ---- Sağlık kontrolü ----
@@ -39,7 +37,7 @@ app.post('/auth/register', (req, res) => {
     return res.status(400).json({ message: 'Bu email ile zaten kullanıcı var.' });
   }
 
-  // Kullanıcıyı ekle (şimdilik şifreyi açık tutuyoruz, ileride hash'leyeceğiz)
+  // Kullanıcıyı ekle
   users.push({ email, password });
 
   return res.status(201).json({ message: 'Kayıt başarılı.', email });
@@ -60,8 +58,6 @@ app.post('/auth/login', (req, res) => {
     return res.status(401).json({ message: 'Email veya şifre hatalı.' });
   }
 
-  // Şimdilik sadece "giriş başarılı" döndürüyoruz.
-  // İleride burada token vs. vereceğiz.
   return res.json({ message: 'Giriş başarılı.', email: user.email });
 });
 
