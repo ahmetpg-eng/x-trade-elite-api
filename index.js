@@ -7,7 +7,7 @@ const app = express();
 // -------- Middleware --------
 app.use(
   cors({
-    origin: '*', // istersen sadece frontend domainini de yazabilirsin
+    origin: '*', // İstersen buraya sadece frontend domainini yazabilirsin
   })
 );
 app.use(express.json());
@@ -90,7 +90,6 @@ app.post('/auth/login', async (req, res) => {
       return res.status(401).json({ message: error.message });
     }
 
-    // Supabase v2: data.session içinde access_token var
     const session = data.session || null;
 
     return res.json({
@@ -101,10 +100,10 @@ app.post('/auth/login', async (req, res) => {
       },
       session: session
         ? {
-          access_token: session.access_token,
-          expires_at: session.expires_at,
-          refresh_token: session.refresh_token,
-        }
+            access_token: session.access_token,
+            expires_at: session.expires_at,
+            refresh_token: session.refresh_token,
+          }
         : null,
     });
   } catch (err) {
@@ -116,11 +115,10 @@ app.post('/auth/login', async (req, res) => {
 });
 
 // -------- Çıkış yap (Logout) --------
-// NOT: Supabase JS v2'de auth.signOut client-side için tasarlanmış.
-// Backend üzerinden soft-logout yapıyoruz: frontende "token'ı sil" diyoruz.
 app.post('/auth/logout', async (req, res) => {
   try {
-    // İstersen burada ileride refresh token black-list vb. tutabilirsin.
+    // Supabase JS v2'de server-side signOut kısıtlı;
+    // şimdilik frontende token'ı silmesini söyleyen basit bir endpoint.
     return res.json({ message: 'Oturum sonlandırıldı.' });
   } catch (err) {
     console.error('Logout error:', err);
