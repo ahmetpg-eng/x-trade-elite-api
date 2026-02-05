@@ -97,6 +97,7 @@ app.post('/auth/login', async (req, res) => {
       user: {
         id: data.user.id,
         email: data.user.email,
+        metadata: data.user.user_metadata || {},
       },
       session: session
         ? {
@@ -182,6 +183,62 @@ app.get('/positions/open', async (req, res) => {
     return res
       .status(500)
       .json({ message: 'Pozisyon verileri alınırken hata oluştu.' });
+  }
+});
+
+// -------- Admin Login --------
+app.post('/admin/login', async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+
+    if (!email || !password) {
+      return res
+        .status(400)
+        .json({ message: 'Email ve şifre zorunludur.' });
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      return res.status(401).json({ message: error.message });
+    }
+
+    // Kullanıcının metadata'sından role'ü kontrol et
+    const role =
+      (data.user.user_metadata && data.user.user_metadata.role) || null;
+
+    if (role !== 'admin') {
+      return res.status(403).json({
+        message:
+          'Bu hesaba admin yetkisi atanmamış. Lütfen sistem yöneticisine başvurun.',
+      });
+    }
+
+    const session = data.session || null;
+
+    return res.json({
+      message: 'Admin girişi başarılı.',
+      admin: {
+        id: data.user.id,
+        email: data.user.email,
+        role: role,
+      },
+      session: session
+        ? {
+            access_token: session.access_token,
+            expires_at: session.expires_at,
+            refresh_token: session.refresh_token,
+          }
+        : null,
+    });
+  } catch (err) {
+    console.error('Admin login error:', err);
+    return res
+      .status(500)
+      .json({ message: 'Sunucu hatası. Lütfen daha sonra tekrar deneyin.' });
   }
 });
 
