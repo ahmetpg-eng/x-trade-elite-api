@@ -117,14 +117,71 @@ app.post('/auth/login', async (req, res) => {
 // -------- Çıkış yap (Logout) --------
 app.post('/auth/logout', async (req, res) => {
   try {
-    // Supabase JS v2'de server-side signOut kısıtlı;
-    // şimdilik frontende token'ı silmesini söyleyen basit bir endpoint.
+    // Şimdilik sadece frontende "token'ı sil" demek için kullanıyoruz.
     return res.json({ message: 'Oturum sonlandırıldı.' });
   } catch (err) {
     console.error('Logout error:', err);
     return res
       .status(500)
       .json({ message: 'Sunucu hatası. Lütfen daha sonra tekrar deneyin.' });
+  }
+});
+
+// -------- Funding History (Wallet) --------
+app.get('/funding/history', async (req, res) => {
+  try {
+    const userId = req.query.userId;
+
+    if (!userId) {
+      return res.status(400).json({ message: 'userId zorunludur.' });
+    }
+
+    const { data, error } = await supabase
+      .from('funding_transactions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Funding history error:', error);
+      return res.status(400).json({ message: error.message });
+    }
+
+    return res.json({ items: data || [] });
+  } catch (err) {
+    console.error('Funding history error:', err);
+    return res
+      .status(500)
+      .json({ message: 'Funding verileri alınırken hata oluştu.' });
+  }
+});
+
+// -------- Open Positions (Trading) --------
+app.get('/positions/open', async (req, res) => {
+  try {
+    const userId = req.query.userId;
+
+    if (!userId) {
+      return res.status(400).json({ message: 'userId zorunludur.' });
+    }
+
+    const { data, error } = await supabase
+      .from('open_positions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('open_time', { ascending: false });
+
+    if (error) {
+      console.error('Open positions error:', error);
+      return res.status(400).json({ message: error.message });
+    }
+
+    return res.json({ items: data || [] });
+  } catch (err) {
+    console.error('Open positions error:', err);
+    return res
+      .status(500)
+      .json({ message: 'Pozisyon verileri alınırken hata oluştu.' });
   }
 });
 
