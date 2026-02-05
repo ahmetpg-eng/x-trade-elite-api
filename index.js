@@ -5,21 +5,20 @@ const { createClient } = require('@supabase/supabase-js');
 const app = express();
 
 // -------- Middleware --------
-app.use(cors());
+app.use(
+  cors({
+    origin: '*', // istersen sadece frontend domainini de yazabilirsin
+  })
+);
 app.use(express.json());
 
 // -------- Supabase Client --------
-// DİKKAT: Bu değerleri KODUN İÇİNE YAZMIYORUZ.
-// Render ortam değişkenlerinden okunacak:
-// SUPABASE_URL  = https://nqyjweqciptwhjptkcxw.supabase.co
-// SUPABASE_ANON_KEY = (anon public key)
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.warn(
-    '[WARN] SUPABASE_URL veya SUPABASE_ANON_KEY env değişkenleri tanımlı değil. ' +
-      'Register/Login çağrıları çalışmayacaktır.'
+    '[WARN] SUPABASE_URL veya SUPABASE_ANON_KEY env değişkenleri tanımlı değil.'
   );
 }
 
@@ -36,8 +35,6 @@ app.get('/', (req, res) => {
 });
 
 // -------- Kayıt ol (Register) --------
-// POST /auth/register
-// Body: { fullName: "Test User", email: "a@b.com", password: "123456" }
 app.post('/auth/register', async (req, res) => {
   try {
     const { fullName, email, password } = req.body || {};
@@ -48,19 +45,17 @@ app.post('/auth/register', async (req, res) => {
         .json({ message: 'Email ve şifre zorunludur.' });
     }
 
-    // Supabase Auth ile kullanıcı oluştur
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
-          fullName: fullName || null
-        }
-      }
+          fullName: fullName || null,
+        },
+      },
     });
 
     if (error) {
-      // Örneğin "User already registered" gibi hata gelebilir
       return res.status(400).json({ message: error.message });
     }
 
@@ -76,8 +71,6 @@ app.post('/auth/register', async (req, res) => {
 });
 
 // -------- Giriş yap (Login) --------
-// POST /auth/login
-// Body: { email, password }
 app.post('/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body || {};
@@ -90,20 +83,47 @@ app.post('/auth/login', async (req, res) => {
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
-      password
+      password,
     });
 
     if (error) {
       return res.status(401).json({ message: error.message });
     }
 
+    // Supabase v2: data.session içinde access_token var
+    const session = data.session || null;
+
     return res.json({
       message: 'Giriş başarılı.',
-      userId: data.user.id,
-      email: data.user.email
+      user: {
+        id: data.user.id,
+        email: data.user.email,
+      },
+      session: session
+        ? {
+          access_token: session.access_token,
+          expires_at: session.expires_at,
+          refresh_token: session.refresh_token,
+        }
+        : null,
     });
   } catch (err) {
     console.error('Login error:', err);
+    return res
+      .status(500)
+      .json({ message: 'Sunucu hatası. Lütfen daha sonra tekrar deneyin.' });
+  }
+});
+
+// -------- Çıkış yap (Logout) --------
+// NOT: Supabase JS v2'de auth.signOut client-side için tasarlanmış.
+// Backend üzerinden soft-logout yapıyoruz: frontende "token'ı sil" diyoruz.
+app.post('/auth/logout', async (req, res) => {
+  try {
+    // İstersen burada ileride refresh token black-list vb. tutabilirsin.
+    return res.json({ message: 'Oturum sonlandırıldı.' });
+  } catch (err) {
+    console.error('Logout error:', err);
     return res
       .status(500)
       .json({ message: 'Sunucu hatası. Lütfen daha sonra tekrar deneyin.' });
