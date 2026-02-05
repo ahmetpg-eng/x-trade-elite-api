@@ -1,6 +1,191 @@
-// ... üstte auth, funding, positions vb. var
+const express = require('express');
+const cors = require('cors');
+const { createClient } = require('@supabase/supabase-js');
 
-// -------- Public Instruments (WebTrader için) --------
+const app = express();
+
+// -------- Middleware --------
+app.use(
+  cors({
+    origin: '*',
+  })
+);
+app.use(express.json());
+
+// -------- Supabase Client --------
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.warn(
+    '[WARN] SUPABASE_URL veya SUPABASE_ANON_KEY env değişkenleri tanımlı değil.'
+  );
+}
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// -------- Sağlık kontrolü --------
+app.get('/health', (req, res) => {
+  res.json({ status: 'OK' });
+});
+
+// -------- Root --------
+app.get('/', (req, res) => {
+  res.send('X-Trade Elite API is running');
+});
+
+// -------- Register --------
+app.post('/auth/register', async (req, res) => {
+  try {
+    const { fullName, email, password } = req.body || {};
+
+    if (!email || !password) {
+      return res
+        .status(400)
+        .json({ message: 'Email ve şifre zorunludur.' });
+    }
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          fullName: fullName || null,
+        },
+      },
+    });
+
+    if (error) {
+      return res.status(400).json({ message: error.message });
+    }
+
+    return res
+      .status(201)
+      .json({ message: 'Kayıt başarılı.', userId: data.user.id });
+  } catch (err) {
+    console.error('Register error:', err);
+    return res
+      .status(500)
+      .json({ message: 'Sunucu hatası. Lütfen daha sonra tekrar deneyin.' });
+  }
+});
+
+// -------- Login --------
+app.post('/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+
+    if (!email || !password) {
+      return res
+        .status(400)
+        .json({ message: 'Email ve şifre zorunludur.' });
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      return res.status(401).json({ message: error.message });
+    }
+
+    const session = data.session || null;
+
+    return res.json({
+      message: 'Giriş başarılı.',
+      user: {
+        id: data.user.id,
+        email: data.user.email,
+        metadata: data.user.user_metadata || {},
+      },
+      session: session
+        ? {
+            access_token: session.access_token,
+            expires_at: session.expires_at,
+            refresh_token: session.refresh_token,
+          }
+        : null,
+    });
+  } catch (err) {
+    console.error('Login error:', err);
+    return res
+      .status(500)
+      .json({ message: 'Sunucu hatası. Lütfen daha sonra tekrar deneyin.' });
+  }
+});
+
+// -------- Logout (placeholder) --------
+app.post('/auth/logout', async (req, res) => {
+  try {
+    return res.json({ message: 'Oturum sonlandırıldı.' });
+  } catch (err) {
+    console.error('Logout error:', err);
+    return res
+      .status(500)
+      .json({ message: 'Sunucu hatası. Lütfen daha sonra tekrar deneyin.' });
+  }
+});
+
+// -------- Funding History --------
+app.get('/funding/history', async (req, res) => {
+  try {
+    const userId = req.query.userId;
+
+    if (!userId) {
+      return res.status(400).json({ message: 'userId zorunludur.' });
+    }
+
+    const { data, error } = await supabase
+      .from('funding_transactions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Funding history error:', error);
+      return res.status(400).json({ message: error.message });
+    }
+
+    return res.json({ items: data || [] });
+  } catch (err) {
+    console.error('Funding history error:', err);
+    return res
+      .status(500)
+      .json({ message: 'Funding verileri alınırken hata oluştu.' });
+  }
+});
+
+// -------- Open Positions --------
+app.get('/positions/open', async (req, res) => {
+  try {
+    const userId = req.query.userId;
+
+    if (!userId) {
+      return res.status(400).json({ message: 'userId zorunludur.' });
+    }
+
+    const { data, error } = await supabase
+      .from('open_positions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('open_time', { ascending: false });
+
+    if (error) {
+      console.error('Open positions error:', error);
+      return res.status(400).json({ message: error.message });
+    }
+
+    return res.json({ items: data || [] });
+  } catch (err) {
+    console.error('Open positions error:', err);
+    return res
+      .status(500)
+      .json({ message: 'Pozisyon verileri alınırken hata oluştu.' });
+  }
+});
+
+// -------- Public Instruments (WebTrader) --------
 app.get('/instruments', async (req, res) => {
   try {
     const { group, enabled } = req.query;
@@ -17,7 +202,15 @@ app.get('/instruments', async (req, res) => {
       tick_size,
       digits,
       is_enabled,
-      sort_order
+      sort_order,
+      base_asset,
+      quote_asset,
+      min_lot,
+      max_lot,
+      lot_step,
+      max_leverage,
+      margin_mode,
+      product_type
     `);
 
     if (group) {
@@ -46,6 +239,61 @@ app.get('/instruments', async (req, res) => {
   }
 });
 
+// -------- Admin Login --------
+app.post('/admin/login', async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+
+    if (!email || !password) {
+      return res
+        .status(400)
+        .json({ message: 'Email ve şifre zorunludur.' });
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      return res.status(401).json({ message: error.message });
+    }
+
+    const role =
+      (data.user.user_metadata && data.user.user_metadata.role) || null;
+
+    if (role !== 'admin') {
+      return res.status(403).json({
+        message:
+          'Bu hesaba admin yetkisi atanmamış. Lütfen sistem yöneticisine başvurun.',
+      });
+    }
+
+    const session = data.session || null;
+
+    return res.json({
+      message: 'Admin girişi başarılı.',
+      admin: {
+        id: data.user.id,
+        email: data.user.email,
+        role: role,
+      },
+      session: session
+        ? {
+            access_token: session.access_token,
+            expires_at: session.expires_at,
+            refresh_token: session.refresh_token,
+          }
+        : null,
+    });
+  } catch (err) {
+    console.error('Admin login error:', err);
+    return res
+      .status(500)
+      .json({ message: 'Sunucu hatası. Lütfen daha sonra tekrar deneyin.' });
+  }
+});
+
 // -------- Admin: Instruments List --------
 app.get('/admin/instruments', async (req, res) => {
   try {
@@ -64,6 +312,14 @@ app.get('/admin/instruments', async (req, res) => {
       digits,
       is_enabled,
       sort_order,
+      base_asset,
+      quote_asset,
+      min_lot,
+      max_lot,
+      lot_step,
+      max_leverage,
+      margin_mode,
+      product_type,
       created_at
     `);
 
@@ -104,6 +360,14 @@ app.post('/admin/instruments', async (req, res) => {
       digits,
       sort_order,
       is_enabled,
+      base_asset,
+      quote_asset,
+      min_lot,
+      max_lot,
+      lot_step,
+      max_leverage,
+      margin_mode,
+      product_type,
     } = req.body || {};
 
     if (
@@ -136,6 +400,14 @@ app.post('/admin/instruments', async (req, res) => {
           digits: digits ?? 2,
           sort_order: sort_order ?? 0,
           is_enabled: typeof is_enabled === 'boolean' ? is_enabled : true,
+          base_asset: base_asset || null,
+          quote_asset: quote_asset || null,
+          min_lot: min_lot ?? 0.001,
+          max_lot: max_lot ?? 1000,
+          lot_step: lot_step ?? 0.001,
+          max_leverage: max_leverage ?? 100,
+          margin_mode: margin_mode || 'cross',
+          product_type: product_type || 'spot',
         },
       ])
       .select()
@@ -175,12 +447,20 @@ app.patch('/admin/instruments/:id', async (req, res) => {
       'digits',
       'is_enabled',
       'sort_order',
+      'base_asset',
+      'quote_asset',
+      'min_lot',
+      'max_lot',
+      'lot_step',
+      'max_leverage',
+      'margin_mode',
+      'product_type',
     ];
 
     const updateData = {};
     for (const key of allowedFields) {
       if (Object.prototype.hasOwnProperty.call(payload, key)) {
-        // @ts-ignore
+        // eslint-disable-next-line no-unused-vars
         updateData[key] = payload[key];
       }
     }
@@ -208,4 +488,10 @@ app.patch('/admin/instruments/:id', async (req, res) => {
       .status(500)
       .json({ message: 'Enstrüman güncellenirken hata oluştu.' });
   }
+});
+
+// -------- Start server --------
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, () => {
+  console.log(`API listening on port ${PORT}`);
 });
